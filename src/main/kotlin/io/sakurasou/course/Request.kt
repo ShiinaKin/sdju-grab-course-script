@@ -10,6 +10,7 @@ import io.sakurasou.common.ApiResult
 import io.sakurasou.commonRequestBuilder
 import io.sakurasou.config
 import io.sakurasou.entity.*
+import io.sakurasou.exception.CustomizeException
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -31,7 +32,7 @@ fun isSelectStart(): Boolean {
         .get()
         .build()
     return okHttpClient.newCall(request).execute().use {
-        if (!it.isSuccessful) throw RuntimeException("getSelectStart Request failed, code: ${it.code}, msg: ${it.message}")
+        if (!it.isSuccessful) throw CustomizeException("getSelectStart Request failed", it.code,  it.message)
         val result = jsonMapper.readValue<ApiResult<List<Int>>>(it.body!!.string())
         result.data?.isNotEmpty() ?: false
     }
@@ -47,10 +48,8 @@ fun getOpenedTurn(): List<SelectTurn> {
 
         val body = it.body!!.string()
         val result = jsonMapper.readValue<ApiResult<List<SelectTurn>>>(body)
-        result.data ?: run {
-            logger.debug { "resp: $body" }
-            throw RuntimeException("getOpenedTurn Request failed")
-        }
+
+        result.data ?: throw CustomizeException(message = "getOpenedTurn Request failed", desc = body)
     }
 }
 
@@ -66,10 +65,8 @@ fun getMajorPlan(selectTurnId: Long): MajorPlan {
         }
         val body = it.body!!.string()
         val result = jsonMapper.readValue<ApiResult<MajorPlan>>(body)
-        result.data ?: run {
-            logger.debug { "resp: $body" }
-            throw RuntimeException("getMajorPlan Request failed")
-        }
+
+        result.data ?: throw CustomizeException(message = "getMajorPlan Request failed", desc = body)
     }
 }
 
@@ -83,15 +80,12 @@ fun getLessons(selectTurnId: Long): List<Lesson> {
         .post(courseFilterRequestBody)
         .build()
     return okHttpClient.newCall(courseFilterRequest).execute().use {
-        if (!it.isSuccessful) throw RuntimeException("getLessons Request failed, code: ${it.code}, msg: ${it.message}")
+        if (!it.isSuccessful) throw CustomizeException("getLessons Request failed", it.code,  it.message)
 
         val body = it.body!!.string()
         val result = jsonMapper.readValue<ApiResult<LessonQueryResult>>(body)
 
-        result.data?.lessons ?: run {
-            logger.debug { "resp: $body" }
-            throw RuntimeException("getLessons Request failed")
-        }
+        result.data?.lessons ?: throw CustomizeException(message = "getLessons Request failed", desc = body)
     }
 }
 
@@ -110,14 +104,15 @@ fun grabCourse(selectTurnId: Long, lessonId: Long): Boolean {
         .post(reqIdRequestBody)
         .build()
     val reqId = okHttpClient.newCall(reqIdRequest).execute().use {
-        if (!it.isSuccessful) throw RuntimeException("grabCourse Request failed, code: ${it.code}, msg: ${it.message}")
-
-        val body = it.body?.string()
-        val result = jsonMapper.readValue<ApiResult<String>>(body!!)
-        result.data ?: run {
-            logger.debug { "resp: $body" }
-            throw RuntimeException("grabCourse Request failed")
+        if (!it.isSuccessful) {
+            logger.warn {  CustomizeException("getReqId Request failed", it.code, it.message) }
+            return false
         }
+        runCatching {
+            val body = it.body?.string() ?: throw CustomizeException(message = "getReqId Request failed", desc = "body is null")
+            val result = jsonMapper.readValue<ApiResult<String>>(body)
+            result.data ?: throw CustomizeException(message = "getReqId Request failed", desc = body)
+        }.getOrElse { return false }
     }
 
     val grabCourseRequest = commonRequestBuilder
@@ -126,6 +121,7 @@ fun grabCourse(selectTurnId: Long, lessonId: Long): Boolean {
         .build()
     val grabResult = okHttpClient.newCall(grabCourseRequest).execute().use {
         if (!it.isSuccessful) {
+            if (it.code == 401) throw CustomizeException("grabCourseRequest Request failed", it.code,  it.message)
             logger.warn { "grabCourseRequest Request failed" }
             return false
         }
@@ -133,18 +129,11 @@ fun grabCourse(selectTurnId: Long, lessonId: Long): Boolean {
         val result = jsonMapper.readValue<ApiResult<GrabRequestResult>>(body!!)
         result.data ?: run {
             logger.debug { "grabCourseRequest body: $body" }
-            null
+            logger.debug { "GrabRequestResult is null, probably cause by too fast request" }
+            return false
         }
     }
 
-    if (grabResult == null) {
-        logger.debug { "GrabRequestResult is null, probably cause by too fast request" }
-        return false
-    }
-
-    return if (grabResult.success) true
-    else {
-        logger.debug { "grabResult.errorMessage: ${grabResult.errorMessage?.text}" }
-        false
-    }
+    if (!grabResult.success) logger.debug { "grabResult.errorMessage: ${grabResult.errorMessage?.text}" }
+    return grabResult.success
 }

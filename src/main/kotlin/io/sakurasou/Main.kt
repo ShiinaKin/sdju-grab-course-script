@@ -8,11 +8,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import io.sakurasou.common.Config
 import io.sakurasou.course.getOpenedTurn
 import io.sakurasou.course.isSelectStart
+import io.sakurasou.exception.CustomizeException
 import io.sakurasou.util.CourseUtils
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import okhttp3.Headers
 import okhttp3.Request
 import org.apache.commons.io.FileUtils
@@ -33,12 +31,12 @@ import kotlin.time.toJavaDuration
 
 const val CONFIG_FILE_PATH = "./config.yaml"
 
-val ioScope = CoroutineScope(Dispatchers.IO)
+val ioScope = CoroutineScope(Dispatchers.IO + CoroutineExceptionHandler { _, throwable -> throw throwable })
 val scanner = Scanner(System.`in`, "GBK")
 
 val yamlMapper: ObjectMapper = YAMLMapper().registerModules(kotlinModule(), JavaTimeModule())
 
-val threadPool: ExecutorService = Executors.newFixedThreadPool(4)
+val threadPool: ExecutorService by lazy { Executors.newFixedThreadPool(4) }
 
 val configFile: File = FileUtils.getFile(CONFIG_FILE_PATH)
 lateinit var config: Config
@@ -84,11 +82,7 @@ This is free software, and you are welcome to redistribute it under certain cond
         }
 
         when (scanner.nextLine().trimIndent()) {
-            "1" -> {
-                logger.info { "Start grab courses infinity" }
-                grab()
-                logger.info { "Grab courses finished" }
-            }
+            "1" -> grab()
 
             "2" -> {
                 init()
@@ -106,14 +100,16 @@ This is free software, and you are welcome to redistribute it under certain cond
 }
 
 fun grab() {
+    logger.info { "Start grabbing courses" }
+    val countDownLatch = CountDownLatch(4)
     try {
         while (!isSelectStart()) Thread.sleep(Duration.parse("200ms").toJavaDuration())
-        logger.info { "Select start" }
+        logger.info { "Select is start" }
         val openedTurns = getOpenedTurn()
-        logger.info { "openedTurns: ${openedTurns.joinToString(", ") { it.name }}" }
+        logger.info { "opened select turns: ${openedTurns.joinToString(", ") { it.name }}" }
         CourseUtils.classifyAndFetchLesson(openedTurns)
+
         logger.info { "grabbing..." }
-        val countDownLatch = CountDownLatch(4)
         CourseUtils.categoryArr.map {
             threadPool.execute {
                 var retryTimes = 3
@@ -123,6 +119,7 @@ fun grab() {
                             CourseUtils.grabCourse(it)
                             retryTimes = 0
                         } catch (e: Exception) {
+                            logger.info { "====${e.message}====" }
                             retryTimes--
                             if (retryTimes > 0) delay(Duration.parse("1s"))
                             else throw e
@@ -133,10 +130,16 @@ fun grab() {
                 }
             }
         }
+
         countDownLatch.await()
+
+    } catch (e: CustomizeException) {
+        if (e.code == 401) logger.error { "Authorization failed, please check your authorization token" }
+        else logger.error { "Exception: $e" }
     } catch (e: Exception) {
         logger.error(e) { "Unexpected Exception: " }
     }
+    logger.info { "Grab courses finished" }
 }
 
 fun init() {

@@ -30,10 +30,10 @@ object CourseUtils {
     const val CATEGORY_体育四史: String = "体育四史"
 
     val countMap = mapOf(
-        "通识选修" to AtomicInteger(config.categoryAndKeyword["通识选修"]?.first ?: 0),
-        "美育英语" to AtomicInteger(config.categoryAndKeyword["美育英语"]?.first ?: 0),
-        "培养方案" to AtomicInteger(config.categoryAndKeyword["培养方案"]?.first ?: 0),
-        "体育四史" to AtomicInteger(config.categoryAndKeyword["体育四史"]?.first ?: 0),
+        "通识选修" to AtomicInteger(config.categoryConfigMap["通识选修"]?.count ?: 0),
+        "美育英语" to AtomicInteger(config.categoryConfigMap["美育英语"]?.count ?: 0),
+        "培养方案" to AtomicInteger(config.categoryConfigMap["培养方案"]?.count ?: 0),
+        "体育四史" to AtomicInteger(config.categoryConfigMap["体育四史"]?.count ?: 0),
     )
 
     val categoryArr = arrayOf("通识选修", "美育英语", "培养方案", "体育四史")
@@ -69,29 +69,31 @@ object CourseUtils {
             logger.info { "don't need to grab category: $categoryName" }
             return
         }
-        val cfg = config.categoryAndKeyword[categoryName] ?: run {
+        val cfg = config.categoryConfigMap[categoryName] ?: run {
             logger.warn { "cannot find keyword for category: $categoryName" }
             return
         }
-        val keywords = cfg.second
+        val minCredits = cfg.minCredits
+        val keywords = cfg.keywords
         val (_, turnId, lessons) = classifiedLessons.firstOrNull { it.first == categoryName } ?: run {
             logger.warn { "cannot find category: $categoryName" }
             return
         }
-        logger.info { "start grab category: $categoryName"}
+        logger.info { "start grab category: $categoryName" }
         while (cnt.get() > 0) {
             lessons.forEach outer@{ lesson ->
                 keywords.forEach inner@{ keyword ->
                     if (cnt.get() <= 0) return@outer
-                    if (lesson.course.nameZh.contains(keyword)
-                        || lesson.course.nameEn != null && lesson.course.nameEn.contains(keyword)
+                    if ((lesson.course.nameZh.contains(keyword)
+                                || lesson.course.nameEn != null && lesson.course.nameEn.contains(keyword))
+                        && lesson.course.credits >= minCredits
                     ) {
                         ioScope.launch {
                             if (grabCourse(turnId, lesson.id)) {
                                 cnt.getAndDecrement()
-                                logger.info { "category: $categoryName, grab ${lesson.course.nameZh}/${lesson.course.nameEn} ${lesson.code} successfully" }
+                                logger.info { "category: $categoryName, grab ${lesson.course.nameZh}/${lesson.course.nameEn} ${lesson.code} credits: ${lesson.course.credits} successfully" }
                             } else {
-                                logger.debug { "category: $categoryName, grab ${lesson.course.nameZh}/${lesson.course.nameEn} ${lesson.code} failed" }
+                                logger.debug { "category: $categoryName, grab ${lesson.course.nameZh}/${lesson.course.nameEn} ${lesson.code} credits: ${lesson.course.credits} failed" }
                             }
                         }
                         delay(Duration.parse("150ms"))
@@ -99,7 +101,7 @@ object CourseUtils {
                 }
             }
         }
-        logger.info { "category: $categoryName successfully grab ${cfg.first} course" }
+        logger.info { "category: $categoryName successfully grab ${cfg.count} course" }
     }
 
 }
