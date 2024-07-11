@@ -6,7 +6,7 @@ package io.sakurasou.entity
  */
 data class AddRequest(
     val studentAssoc: Long,
-    val courseSelectTurnAssoc: Int,
+    val courseSelectTurnAssoc: Long,
     val requestMiddleDtos: List<RequestMiddleDto>,
     val coursePackAssoc: Int?
 )

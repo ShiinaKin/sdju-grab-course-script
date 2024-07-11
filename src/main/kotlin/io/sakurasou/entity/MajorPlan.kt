@@ -61,9 +61,8 @@ fun MajorPlan.flat(): List<PlanCourse> {
     val tempList = mutableListOf<PlanCourse>()
     fun dfs(courseModule: CourseModule) {
         if (courseModule.children.isNullOrEmpty()) {
-            if (courseModule.planCourses != null) {
+            if (!courseModule.planCourses.isNullOrEmpty())
                 tempList.addAll(courseModule.planCourses)
-            }
             return
         }
         courseModule.children.forEach { dfs(it) }

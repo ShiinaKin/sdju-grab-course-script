@@ -1,3 +1,5 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     kotlin("jvm") version "2.0.0"
     id("com.github.johnrengelman.shadow") version "8.1.1"
@@ -32,6 +34,12 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
+tasks.shadowJar {
+    from(projectDir) {
+        include("LICENCE")
+    }
+}
+
 tasks.build {
     dependsOn("shadowJar")
 }
@@ -39,6 +47,9 @@ tasks.build {
 tasks.jar {
     manifest {
         attributes["Main-Class"] = "io.sakurasou.MainKt"
+    }
+    from(projectDir) {
+        include("LICENCE")
     }
 }
 

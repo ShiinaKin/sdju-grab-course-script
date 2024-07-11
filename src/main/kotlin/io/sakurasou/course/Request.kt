@@ -10,13 +10,9 @@ import io.sakurasou.common.ApiResult
 import io.sakurasou.commonRequestBuilder
 import io.sakurasou.config
 import io.sakurasou.entity.*
-import io.sakurasou.ioScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
-import kotlin.time.Duration
 
 /**
  * @author ShiinaKin
@@ -27,126 +23,128 @@ val jsonMapper: ObjectMapper = JsonMapper().registerModules(kotlinModule(), Java
 
 val logger = KotlinLogging.logger { }
 
-lateinit var majorPlan: MajorPlan
-lateinit var allPlanCourse: List<PlanCourse>
+val classifiedLessons = mutableListOf<Triple<String, Long, List<Lesson>>>()
 
-fun getMajorPlan() {
-    val majorPlanRequest = commonRequestBuilder
-        .url("https://jwgl.sdju.edu.cn/course-selection-api/api/v1/student/course-select/major-plan/${config.selectTurnId}/${config.studentId}")
+fun isSelectStart(): Boolean {
+    val request = commonRequestBuilder
+        .url("https://jwgl.sdju.edu.cn/course-selection-api/api/v1/student/course-select/students")
         .get()
         .build()
-    okHttpClient.newCall(majorPlanRequest).execute().run {
-        if (!isSuccessful) {
-            logger.warn { "Request failed" }
-            return
-        }
-        val result = jsonMapper.readValue<ApiResult<MajorPlan>>(body!!.string())
-        majorPlan = result.data!!
-        allPlanCourse = majorPlan.flat()
+    return okHttpClient.newCall(request).execute().use {
+        if (!it.isSuccessful) throw RuntimeException("getSelectStart Request failed, code: ${it.code}, msg: ${it.message}")
+        val result = jsonMapper.readValue<ApiResult<List<Int>>>(it.body!!.string())
+        result.data?.isNotEmpty() ?: false
     }
 }
 
-fun getCourseDetail(courseId: Long): Map<Pair<Long, String>, String> {
-    val courseFilter = CourseFilter(config.selectTurnId, config.studentId, courseId)
+fun getOpenedTurn(): List<SelectTurn> {
+    val request = commonRequestBuilder
+        .url("https://jwgl.sdju.edu.cn/course-selection-api/api/v1/student/course-select/open-turns/${config.studentId}")
+        .get()
+        .build()
+    return okHttpClient.newCall(request).execute().use {
+        if (!it.isSuccessful) throw RuntimeException("getOpenedTurn Request failed, code: ${it.code}, msg: ${it.message}")
+
+        val body = it.body!!.string()
+        val result = jsonMapper.readValue<ApiResult<List<SelectTurn>>>(body)
+        result.data ?: run {
+            logger.debug { "resp: $body" }
+            throw RuntimeException("getOpenedTurn Request failed")
+        }
+    }
+}
+
+fun getMajorPlan(selectTurnId: Long): MajorPlan {
+    val majorPlanRequest = commonRequestBuilder
+        .url("https://jwgl.sdju.edu.cn/course-selection-api/api/v1/student/course-select/major-plan/$selectTurnId/${config.studentId}")
+        .get()
+        .build()
+    return okHttpClient.newCall(majorPlanRequest).execute().use {
+        if (!it.isSuccessful) {
+            logger.warn { "getMajorPlan Request failed, code: ${it.code}, msg: ${it.message}" }
+            throw RuntimeException("getMajorPlan Request failed")
+        }
+        val body = it.body!!.string()
+        val result = jsonMapper.readValue<ApiResult<MajorPlan>>(body)
+        result.data ?: run {
+            logger.debug { "resp: $body" }
+            throw RuntimeException("getMajorPlan Request failed")
+        }
+    }
+}
+
+fun getLessons(selectTurnId: Long): List<Lesson> {
+    val courseFilter = CourseFilter(selectTurnId, config.studentId)
     val courseFilterJson = jsonMapper.writeValueAsString(courseFilter)
     val courseFilterRequestBody = courseFilterJson.toRequestBody(("application/json").toMediaType())
 
     val courseFilterRequest = commonRequestBuilder
-        .url("https://jwgl.sdju.edu.cn/course-selection-api/api/v1/student/course-select/query-lesson/${config.studentId}/${config.selectTurnId}")
+        .url("https://jwgl.sdju.edu.cn/course-selection-api/api/v1/student/course-select/query-lesson/${config.studentId}/$selectTurnId")
         .post(courseFilterRequestBody)
         .build()
-    return okHttpClient.newCall(courseFilterRequest).execute().run {
-        if (!isSuccessful) {
-            logger.warn { "Request failed" }
-            return emptyMap()
-        }
-        val result = jsonMapper.readValue<ApiResult<LessonQueryResult>>(body!!.string())
-        val lessons = result.data?.lessons
+    return okHttpClient.newCall(courseFilterRequest).execute().use {
+        if (!it.isSuccessful) throw RuntimeException("getLessons Request failed, code: ${it.code}, msg: ${it.message}")
 
-        if (lessons.isNullOrEmpty()) {
-            return emptyMap()
-        }
+        val body = it.body!!.string()
+        val result = jsonMapper.readValue<ApiResult<LessonQueryResult>>(body)
 
-        lessons.associate {
-            it.id to "${it.course.nameZh}/${it.course.nameEn} ${it.dateTimePlace.text}" to "id: ${it.id} code: ${it.code} " +
-                    "name: ${it.course.nameZh}/${it.course.nameEn} " +
-                    "teacher: ${it.teachers.joinToString { t -> "${t.nameZh}/${t.nameEn}" }} " +
-                    "${it.campus.nameZh}/${it.campus.nameEn} ${it.dateTimePlace.text}"
+        result.data?.lessons ?: run {
+            logger.debug { "resp: $body" }
+            throw RuntimeException("getLessons Request failed")
         }
     }
 }
 
-suspend fun grabCourses(retryTime: Int = 10, delay: String = "100ms") {
-    val needGrabCourseMap = config.needGrabCourseMap
-    needGrabCourseMap.forEach {
-        val addRequest = AddRequest(
-            config.studentId,
-            config.selectTurnId,
-            // 可以传多个，但atomic，所以只传一个
-            listOf(RequestMiddleDto(it.key)),
-            null
-        )
-        val job = ioScope.launch {
-            try {
-                for (i in 1..retryTime) {
-                    val grabResult = grabCourse(config.studentId, addRequest)
-                    if (grabResult) {
-                        logger.info { "Grab course ${it.value} success" }
-                        needGrabCourseMap.remove(it.key)
-                        return@launch
-                    }
-                    logger.debug { "Grab course ${it.value} failed, retry * ${i - 1}" }
-                    delay(Duration.parse(delay))
-                }
-                logger.warn { "Grab course ${it.value} failed.." }
-            } catch (e: Exception) {
-                logger.error(e) { "Unexpected Exception:" }
-            }
-        }
-        // block main thread
-        job.join()
-    }
-}
-
-fun grabCourse(studentId: Long, addRequest: AddRequest): Boolean {
+fun grabCourse(selectTurnId: Long, lessonId: Long): Boolean {
+    val addRequest = AddRequest(
+        config.studentId,
+        selectTurnId,
+        // 可以传多个，但atomic，所以只传一个
+        listOf(RequestMiddleDto(lessonId)),
+        null
+    )
     val addRequestJson = jsonMapper.writeValueAsString(addRequest)
     val reqIdRequestBody = addRequestJson.toRequestBody(("application/json").toMediaType())
     val reqIdRequest = commonRequestBuilder
         .url("https://jwgl.sdju.edu.cn/course-selection-api/api/v1/student/course-select/add-request")
         .post(reqIdRequestBody)
         .build()
+    val reqId = okHttpClient.newCall(reqIdRequest).execute().use {
+        if (!it.isSuccessful) throw RuntimeException("grabCourse Request failed, code: ${it.code}, msg: ${it.message}")
 
-    val reqId = okHttpClient.newCall(reqIdRequest).execute().run {
-        if (!isSuccessful) {
-            logger.warn { "Request failed" }
-            return false
+        val body = it.body?.string()
+        val result = jsonMapper.readValue<ApiResult<String>>(body!!)
+        result.data ?: run {
+            logger.debug { "resp: $body" }
+            throw RuntimeException("grabCourse Request failed")
         }
-        val bodyStr = body?.string()
-        logger.debug { "body: $bodyStr" }
-        val result = jsonMapper.readValue<ApiResult<String>>(bodyStr!!)
-        result.data!!
     }
 
     val grabCourseRequest = commonRequestBuilder
-        .url("https://jwgl.sdju.edu.cn/course-selection-api/api/v1/student/course-select/add-drop-response/$studentId/$reqId")
+        .url("https://jwgl.sdju.edu.cn/course-selection-api/api/v1/student/course-select/add-drop-response/${config.studentId}/$reqId")
         .get()
         .build()
-    val grabResult = okHttpClient.newCall(grabCourseRequest).execute().run {
-        if (!isSuccessful) {
-            logger.warn { "Request failed" }
+    val grabResult = okHttpClient.newCall(grabCourseRequest).execute().use {
+        if (!it.isSuccessful) {
+            logger.warn { "grabCourseRequest Request failed" }
             return false
         }
-        val bodyStr = body?.string()
-        logger.debug { "body: $bodyStr" }
-        val result = jsonMapper.readValue<ApiResult<GrabRequestResult>>(bodyStr!!)
-        result.data
+        val body = it.body?.string()
+        val result = jsonMapper.readValue<ApiResult<GrabRequestResult>>(body!!)
+        result.data ?: run {
+            logger.debug { "grabCourseRequest body: $body" }
+            null
+        }
     }
+
     if (grabResult == null) {
         logger.debug { "GrabRequestResult is null, probably cause by too fast request" }
         return false
     }
-    return if (grabResult.success) true else {
-        logger.debug { grabResult.errorMessage?.text }
+
+    return if (grabResult.success) true
+    else {
+        logger.debug { "grabResult.errorMessage: ${grabResult.errorMessage?.text}" }
         false
     }
 }

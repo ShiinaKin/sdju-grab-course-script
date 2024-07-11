@@ -8,8 +8,17 @@ import java.util.concurrent.ConcurrentHashMap
  */
 data class Config(
     val authorization: String,
-    val cookie: String,
-    val selectTurnId: Int,
     val studentId: Long,
-    val needGrabCourseMap: ConcurrentHashMap<Long, String>
-)
+    val categoryAndKeyword: Map<String, Pair<Int, List<String>>>,
+) {
+    constructor() : this(
+        "authorization",
+        -1,
+        mapOf(
+            "通识选修" to (0 to mutableListOf()),
+            "美育英语" to (0 to mutableListOf()),
+            "培养方案" to (0 to mutableListOf()),
+            "体育四史" to (0 to mutableListOf()),
+        ),
+    )
+}

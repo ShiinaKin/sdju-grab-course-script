@@ -5,12 +5,12 @@ package io.sakurasou.entity
  * 2024/7/8 15:51
  */
 data class CourseFilter(
-    val turnId: Int,
+    val turnId: Long,
     val studentId: Long,
     val semesterId: Int,
     val pageNo: Int,
     val pageSize: Int,
-    val courseId: Long,
+    val courseId: Long?,
     val courseNameOrCode: String?,
     val lessonNameOrCode: String?,
     val teacherNameOrCode: String?,
@@ -35,16 +35,17 @@ data class CourseFilter(
     val sortType: String
 ) {
     constructor(
-        turnId: Int,
+        turnId: Long,
         studentId: Long,
-        courseId: Long,
+        courseId: Long? = null,
         semesterId: Int = 101,
+        sortField: String = "course"
     ) : this(
         turnId,
         studentId,
         semesterId,
         1,
-        100,
+        500,
         courseId,
         null,
         null,
@@ -66,7 +67,7 @@ data class CourseFilter(
         null,
         null,
         null,
-        "lesson",
+        sortField,
         "ASC"
     )
 }

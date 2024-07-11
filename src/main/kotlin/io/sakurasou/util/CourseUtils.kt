@@ -2,11 +2,15 @@ package io.sakurasou.util
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.sakurasou.config
-import io.sakurasou.course.allPlanCourse
-import io.sakurasou.course.getCourseDetail
-import io.sakurasou.course.getMajorPlan
-import io.sakurasou.entity.PlanCourse
-import io.sakurasou.scanner
+import io.sakurasou.course.classifiedLessons
+import io.sakurasou.course.getLessons
+import io.sakurasou.course.grabCourse
+import io.sakurasou.entity.SelectTurn
+import io.sakurasou.ioScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration
 
 /**
  * @author ShiinaKin
@@ -14,47 +18,88 @@ import io.sakurasou.scanner
  */
 object CourseUtils {
     private val logger = KotlinLogging.logger { }
-    fun addCourse() {
-        logger.info { "loading course list..." }
-        getMajorPlan()
-        while (true) {
-            logger.info { "Pls input the course name you want to select, or input '0' to exit:" }
-            val courseName = scanner.nextLine().trimIndent()
-            if (courseName == "0") {
-                break
+
+    const val KEYWORD_通识选修 = "通识选修"
+    const val KEYWORD_美育英语 = "美育英语"
+    const val KEYWORD_培养方案 = "培养方案"
+    const val KEYWORD_体育四史 = "体育四史"
+
+    const val CATEGORY_通识选修: String = "通识选修"
+    const val CATEGORY_美育英语: String = "美育英语"
+    const val CATEGORY_培养方案: String = "培养方案"
+    const val CATEGORY_体育四史: String = "体育四史"
+
+    val countMap = mapOf(
+        "通识选修" to AtomicInteger(config.categoryAndKeyword["通识选修"]?.first ?: 0),
+        "美育英语" to AtomicInteger(config.categoryAndKeyword["美育英语"]?.first ?: 0),
+        "培养方案" to AtomicInteger(config.categoryAndKeyword["培养方案"]?.first ?: 0),
+        "体育四史" to AtomicInteger(config.categoryAndKeyword["体育四史"]?.first ?: 0),
+    )
+
+    val categoryArr = arrayOf("通识选修", "美育英语", "培养方案", "体育四史")
+
+    fun classifyAndFetchLesson(selectTurns: List<SelectTurn>) {
+        selectTurns.forEach {
+            when {
+                KEYWORD_通识选修 in it.name -> {
+                    classifiedLessons.add(Triple(CATEGORY_通识选修, it.id, getLessons(it.id)))
+                }
+
+                KEYWORD_美育英语 in it.name -> {
+                    classifiedLessons.add(Triple(CATEGORY_美育英语, it.id, getLessons(it.id)))
+                }
+
+                KEYWORD_培养方案 in it.name -> {
+                    classifiedLessons.add(Triple(CATEGORY_培养方案, it.id, getLessons(it.id)))
+                }
+
+                KEYWORD_体育四史 in it.name -> {
+                    classifiedLessons.add(Triple(CATEGORY_体育四史, it.id, getLessons(it.id)))
+                }
             }
-            logger.info { "filtering..." }
-            val tempMap = filterCourse(allPlanCourse, courseName)
-            if (tempMap.isEmpty()) {
-                logger.info { "No course found" }
-                continue
-            }
-            logger.info { "find courses(${tempMap.size}):" }
-            val tempList = tempMap.entries.toList()
-            tempList.forEachIndexed { index, it ->
-                logger.info { "${index + 1}. ${it.value}" }
-            }
-            logger.info { "Pls input the index of the course you want to select:" }
-            val index = scanner.nextLine().toIntOrNull()
-            if (index == null || index !in 1..tempMap.size) {
-                logger.info { "Invalid input" }
-                continue
-            }
-            config.needGrabCourseMap[tempList[index - 1].key.first] = tempList[index - 1].key.second
-            logger.info { "Course added" }
         }
     }
 
-    fun filterCourse(allPlanCourse: List<PlanCourse>, courseName: String): MutableMap<Pair<Long, String>, String> {
-        val tempMap = mutableMapOf<Pair<Long, String>, String>()
-        allPlanCourse.forEach { planCourse ->
-            if (planCourse.nameZh != null && planCourse.nameZh.contains(courseName)
-                || planCourse.nameEn != null && planCourse.nameEn.contains(courseName)
-            ) {
-                tempMap.putAll(getCourseDetail(planCourse.id!!))
+    suspend fun grabCourse(categoryName: String) {
+        val cnt = countMap[categoryName] ?: run {
+            logger.warn { "cannot find count for category: $categoryName" }
+            return
+        }
+        if (cnt.get() <= 0) {
+            logger.info { "don't need to grab category: $categoryName" }
+            return
+        }
+        val cfg = config.categoryAndKeyword[categoryName] ?: run {
+            logger.warn { "cannot find keyword for category: $categoryName" }
+            return
+        }
+        val keywords = cfg.second
+        val (_, turnId, lessons) = classifiedLessons.firstOrNull { it.first == categoryName } ?: run {
+            logger.warn { "cannot find category: $categoryName" }
+            return
+        }
+        logger.info { "start grab category: $categoryName"}
+        while (cnt.get() > 0) {
+            lessons.forEach outer@{ lesson ->
+                keywords.forEach inner@{ keyword ->
+                    if (cnt.get() <= 0) return@outer
+                    if (lesson.course.nameZh.contains(keyword)
+                        || lesson.course.nameEn != null && lesson.course.nameEn.contains(keyword)
+                    ) {
+                        ioScope.launch {
+                            if (grabCourse(turnId, lesson.id)) {
+                                cnt.getAndDecrement()
+                                logger.info { "category: $categoryName, grab ${lesson.course.nameZh}/${lesson.course.nameEn} ${lesson.code} successfully" }
+                            } else {
+                                logger.debug { "category: $categoryName, grab ${lesson.course.nameZh}/${lesson.course.nameEn} ${lesson.code} failed" }
+                            }
+                        }
+                        delay(Duration.parse("150ms"))
+                    }
+                }
             }
         }
-        return tempMap
+        logger.info { "category: $categoryName successfully grab ${cfg.first} course" }
     }
 
 }
