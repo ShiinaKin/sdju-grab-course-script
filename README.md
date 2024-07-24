@@ -9,26 +9,32 @@ JRE21+
    ```yaml
    ---
    authorization: "authorization"  # find it from req header, pay attention to the period, as i write this, it's valid for 12h
-   studentId: 73211
+   studentId: -1
    categoryConfigMap:
      通识选修:
-       count: 1  # need grab course cnt
-       minCredits: 2.0  # min credits
-       keywords:  # keywords of course name
-       - "智慧树"
-       - "尔雅"
-     美育英语:
-       count: 0
+     - code: null
+       name: "智慧树"
+       teacher: null
        minCredits: 2.0
-       keywords: []
+       credits: null
+     - code: null
+       name: "智慧树"
+       teacher: null
+       minCredits: 2.0
+       credits: null
+     - code: null
+       name: "尔雅"
+       teacher: null
+       minCredits: 2.0
+       credits: null
+     美育英语: []
      培养方案:
-       count: 0
-       minCredits: 2.0
-       keywords: []
-     体育四史:
-       count: 0
-       minCredits: 2.0
-       keywords: []
+     - code: "(2024-2025-1)-000000A1-01"  # highest priority
+       name: null
+       teacher: null
+       minCredits: null
+       credits: null  # priority is higher than minCredits
+     体育四史: []
    ```
 3. refresh config
 4. grab

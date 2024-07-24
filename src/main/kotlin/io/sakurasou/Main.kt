@@ -42,7 +42,7 @@ val configFile: File = FileUtils.getFile(CONFIG_FILE_PATH)
 lateinit var config: Config
 lateinit var commonRequestBuilder: Request.Builder
 
-val logger = KotlinLogging.logger { }
+private val logger = KotlinLogging.logger { }
 
 fun main() {
     init()
@@ -103,23 +103,25 @@ fun grab() {
     logger.info { "Start grabbing courses" }
     val countDownLatch = CountDownLatch(4)
     try {
-        while (!isSelectStart()) Thread.sleep(Duration.parse("200ms").toJavaDuration())
+        while (!isSelectStart()) {
+            logger.info { "Select is not start, retry..." }
+            Thread.sleep(Duration.parse("200ms").toJavaDuration())
+        }
         logger.info { "Select is start" }
         val openedTurns = getOpenedTurn()
         logger.info { "opened select turns: ${openedTurns.joinToString(", ") { it.name }}" }
         CourseUtils.classifyAndFetchLesson(openedTurns)
 
         logger.info { "grabbing..." }
-        CourseUtils.categoryArr.map {
+        config.categoryCourseMap.forEach {
             threadPool.execute {
                 var retryTimes = 3
                 runBlocking {
                     while (retryTimes > 0) {
                         try {
-                            CourseUtils.grabCourse(it)
+                            CourseUtils.grabCourse(it.toPair())
                             retryTimes = 0
                         } catch (e: Exception) {
-                            logger.info { "====${e.message}====" }
                             retryTimes--
                             if (retryTimes > 0) delay(Duration.parse("1s"))
                             else throw e
