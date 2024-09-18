@@ -148,16 +148,12 @@ fun init() {
     config = initConfig()
     commonRequestBuilder = Request.Builder().headers(
         Headers.headersOf(
-            "Authorization",
-            config.authorization,
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0 Chrome/126.0.0.0 Safari/537.36",
-            "Host",
-            "jwgl.sdju.edu.cn",
-            "Origin",
-            "https://jwgl.sdju.edu.cn",
-            "Referer",
-            "https://jwgl.sdju.edu.cn/course-selection/",
+            "Authorization", config.authorization,
+            "Cookie", config.cookie,
+            "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0 Chrome/128.0.0.0 Safari/537.36",
+            "Host", "jwgl.sdju.edu.cn",
+            "Origin", "https://jwgl.sdju.edu.cn",
+            "Referer", "https://jwgl.sdju.edu.cn/course-selection/",
         )
     )
 }

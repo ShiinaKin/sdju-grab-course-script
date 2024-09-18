@@ -7,7 +7,7 @@ package io.sakurasou.entity
 data class SelectTurn(
     val id: Long,
     val name: String,
-    val bulletin: String,
+    val bulletin: String?,
     val openDateTimeText: String,
     val selectDateTimeText: String,
     val dropDateTimeText: String,
@@ -18,7 +18,7 @@ data class SelectTurn(
     val addRulesText: List<String>,
     val dropRulesText: List<String>,
     val turnMode: TurnMode,
-    val limitCount: Int,
+    val limitCount: Int?,
     val allowEnter: Boolean,
     val disallowReasons: List<String>,
     val notNowTurnDropLimitCount: Int?,

@@ -8,8 +8,10 @@ JRE21+
 2. modify config
    ```yaml
    ---
-   authorization: "authorization"  # find it from req header, pay attention to the period, as i write this, it's valid for 12h
-   studentId: -1
+   authorization: "authorization"  # Open the DeveloperTools(F12) and click `Student Course Select`, find /api/v1/student/course-select/open-turns/123456 request, 
+                                   # find authorization from it req header, pay attention to the period, as I write this, it's valid for 12h
+   cookie: "cookie"  # same as above
+   studentId: 123456  # same place as above, find it at the end of uri
    categoryConfigMap:
      通识选修:
      - code: null

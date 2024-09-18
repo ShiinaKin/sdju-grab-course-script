@@ -11,6 +11,10 @@ import io.sakurasou.commonRequestBuilder
 import io.sakurasou.config
 import io.sakurasou.entity.*
 import io.sakurasou.exception.CustomizeException
+import io.sakurasou.util.CourseUtils.KEYWORD_体育四史
+import io.sakurasou.util.CourseUtils.KEYWORD_培养方案
+import io.sakurasou.util.CourseUtils.KEYWORD_美育英语
+import io.sakurasou.util.CourseUtils.KEYWORD_通识选修
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -31,10 +35,18 @@ fun isSelectStart(): Boolean {
         .url("https://jwgl.sdju.edu.cn/course-selection-api/api/v1/student/course-select/students")
         .get()
         .build()
-    return okHttpClient.newCall(request).execute().use {
-        if (!it.isSuccessful) throw CustomizeException("getSelectStart Request failed", it.code,  it.message)
+    val isCourseSelectionPageOpen = okHttpClient.newCall(request).execute().use {
+        if (!it.isSuccessful) throw CustomizeException("getSelectStart Request failed", it.code, it.message)
         val result = jsonMapper.readValue<ApiResult<List<Int>>>(it.body!!.string())
         result.data?.isNotEmpty() ?: false
+    }
+    if (!isCourseSelectionPageOpen) return false
+    val openedTurns = getOpenedTurn()
+    return openedTurns.any { openedTurn ->
+        KEYWORD_通识选修 in openedTurn.name ||
+        KEYWORD_美育英语 in openedTurn.name ||
+        KEYWORD_培养方案 in openedTurn.name ||
+        KEYWORD_体育四史 in openedTurn.name
     }
 }
 
@@ -80,7 +92,7 @@ fun getLessons(selectTurnId: Long): List<Lesson> {
         .post(courseFilterRequestBody)
         .build()
     return okHttpClient.newCall(courseFilterRequest).execute().use {
-        if (!it.isSuccessful) throw CustomizeException("getLessons Request failed", it.code,  it.message)
+        if (!it.isSuccessful) throw CustomizeException("getLessons Request failed", it.code, it.message)
 
         val body = it.body!!.string()
         val result = jsonMapper.readValue<ApiResult<LessonQueryResult>>(body)
@@ -105,11 +117,14 @@ fun grabCourse(selectTurnId: Long, lessonId: Long): Boolean {
         .build()
     val reqId = okHttpClient.newCall(reqIdRequest).execute().use {
         if (!it.isSuccessful) {
-            logger.warn {  CustomizeException("getReqId Request failed", it.code, it.message) }
+            logger.warn { CustomizeException("getReqId Request failed", it.code, it.message) }
             return false
         }
         runCatching {
-            val body = it.body?.string() ?: throw CustomizeException(message = "getReqId Request failed", desc = "body is null")
+            val body = it.body?.string() ?: throw CustomizeException(
+                message = "getReqId Request failed",
+                desc = "body is null"
+            )
             val result = jsonMapper.readValue<ApiResult<String>>(body)
             result.data ?: throw CustomizeException(message = "getReqId Request failed", desc = body)
         }.getOrElse { return false }
@@ -121,7 +136,7 @@ fun grabCourse(selectTurnId: Long, lessonId: Long): Boolean {
         .build()
     val grabResult = okHttpClient.newCall(grabCourseRequest).execute().use {
         if (!it.isSuccessful) {
-            if (it.code == 401) throw CustomizeException("grabCourseRequest Request failed", it.code,  it.message)
+            if (it.code == 401) throw CustomizeException("grabCourseRequest Request failed", it.code, it.message)
             logger.warn { "grabCourseRequest Request failed" }
             return false
         }
