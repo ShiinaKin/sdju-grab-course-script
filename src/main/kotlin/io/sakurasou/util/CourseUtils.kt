@@ -1,7 +1,9 @@
 package io.sakurasou.util
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.sakurasou.config
 import io.sakurasou.course.classifiedLessons
+import io.sakurasou.course.effectiveCategoryCourseMap
 import io.sakurasou.course.getLessons
 import io.sakurasou.course.grabCourse
 import io.sakurasou.entity.GrabCourseInfo
@@ -20,37 +22,25 @@ import kotlin.time.Duration
 object CourseUtils {
     private val logger = KotlinLogging.logger { }
 
-    const val KEYWORD_通识选修 = "通识选修"
-    const val KEYWORD_美育英语 = "美育英语"
-    const val KEYWORD_培养方案 = "培养方案"
-    const val KEYWORD_体育四史 = "体育四史"
-
-    const val CATEGORY_通识选修: String = "通识选修"
-    const val CATEGORY_美育英语: String = "美育英语"
-    const val CATEGORY_培养方案: String = "培养方案"
-    const val CATEGORY_体育四史: String = "体育四史"
-
-    // val categoryArr = arrayOf("通识选修", "美育英语", "培养方案", "体育四史")
-
     fun classifyAndFetchLesson(selectTurns: List<SelectTurn>) {
-        selectTurns.forEach {
-            when {
-                KEYWORD_通识选修 in it.name -> {
-                    classifiedLessons.add(Triple(CATEGORY_通识选修, it.id, getLessons(it.id)))
-                }
-
-                KEYWORD_美育英语 in it.name -> {
-                    classifiedLessons.add(Triple(CATEGORY_美育英语, it.id, getLessons(it.id)))
-                }
-
-                KEYWORD_培养方案 in it.name -> {
-                    classifiedLessons.add(Triple(CATEGORY_培养方案, it.id, getLessons(it.id)))
-                }
-
-                KEYWORD_体育四史 in it.name -> {
-                    classifiedLessons.add(Triple(CATEGORY_体育四史, it.id, getLessons(it.id)))
+        val keys = config.categoryCourseMap.keys
+        val unmatched = mutableListOf<String>()
+        val selectTurnMutableList = selectTurns.toMutableList()
+        keys.forEach outer@ { key ->
+            val iterator = selectTurnMutableList.iterator()
+            while (iterator.hasNext()) {
+                val selectTurn = iterator.next()
+                if (key in selectTurn.name) {
+                    classifiedLessons.add(Triple(key, selectTurn.id, getLessons(selectTurn.id)))
+                    effectiveCategoryCourseMap[key] = config.categoryCourseMap[key]!!
+                    iterator.remove()
+                    return@outer
                 }
             }
+            unmatched.add(key)
+        }
+        if (unmatched.isNotEmpty()) {
+            logger.info { "unmatched turns(probably cause of duplicate category name): $unmatched" }
         }
     }
 
@@ -60,6 +50,7 @@ object CourseUtils {
             logger.info { "don't need to grab category: $categoryName" }
             return
         }
+        val originCourseSize = courses.size
         val cnt = AtomicInteger(courses.size)
         val (_, turnId, lessons) = classifiedLessons.firstOrNull { it.first == categoryName } ?: run {
             logger.warn { "cannot find category: $categoryName" }
@@ -100,7 +91,7 @@ object CourseUtils {
                 }
             }
         }
-        logger.info { "category: $categoryName successfully grab ${cnt.get() - courses.size} courses" }
+        logger.info { "category: $categoryName successfully grab ${originCourseSize - cnt.get()} courses" }
     }
 
     private fun isEquals(course: GrabCourseInfo, lesson: Lesson): Boolean {

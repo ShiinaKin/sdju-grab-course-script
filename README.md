@@ -12,13 +12,8 @@ JRE21+
                                    # find authorization from it req header, pay attention to the period, as I write this, it's valid for 12h
    cookie: "cookie"  # same as above
    studentId: 123456  # same place as above, find it at the end of uri
-   categoryConfigMap:
+   categoryConfigMap:  # since 1.3.0, category names can be customized to cope with school changes to course selection category names
      通识选修:
-     - code: null
-       name: "智慧树"
-       teacher: null
-       minCredits: 2.0
-       credits: null
      - code: null
        name: "智慧树"
        teacher: null

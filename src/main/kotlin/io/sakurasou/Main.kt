@@ -6,6 +6,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.kotlinModule
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.sakurasou.common.Config
+import io.sakurasou.course.classifiedLessons
+import io.sakurasou.course.effectiveCategoryCourseMap
 import io.sakurasou.course.getOpenedTurn
 import io.sakurasou.course.isSelectStart
 import io.sakurasou.exception.CustomizeException
@@ -101,7 +103,6 @@ This is free software, and you are welcome to redistribute it under certain cond
 
 fun grab() {
     logger.info { "Start grabbing courses" }
-    val countDownLatch = CountDownLatch(4)
     try {
         while (!isSelectStart()) {
             logger.info { "Select is not start, retry..." }
@@ -111,9 +112,11 @@ fun grab() {
         val openedTurns = getOpenedTurn()
         logger.info { "opened select turns: ${openedTurns.joinToString(", ") { it.name }}" }
         CourseUtils.classifyAndFetchLesson(openedTurns)
+        logger.info { "turn after classification: ${classifiedLessons.joinToString(", ") { "[${it.first}, lessonCnt: ${it.third.size}]" }}" }
+        val countDownLatch = CountDownLatch(effectiveCategoryCourseMap.size)
 
         logger.info { "grabbing..." }
-        config.categoryCourseMap.forEach {
+        effectiveCategoryCourseMap.forEach {
             threadPool.execute {
                 var retryTimes = 3
                 runBlocking {

@@ -11,10 +11,6 @@ import io.sakurasou.commonRequestBuilder
 import io.sakurasou.config
 import io.sakurasou.entity.*
 import io.sakurasou.exception.CustomizeException
-import io.sakurasou.util.CourseUtils.KEYWORD_体育四史
-import io.sakurasou.util.CourseUtils.KEYWORD_培养方案
-import io.sakurasou.util.CourseUtils.KEYWORD_美育英语
-import io.sakurasou.util.CourseUtils.KEYWORD_通识选修
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -29,6 +25,7 @@ val jsonMapper: ObjectMapper = JsonMapper().registerModules(kotlinModule(), Java
 val logger = KotlinLogging.logger { }
 
 val classifiedLessons = mutableListOf<Triple<String, Long, List<Lesson>>>()
+val effectiveCategoryCourseMap: MutableMap<String, MutableList<GrabCourseInfo>> = mutableMapOf()
 
 fun isSelectStart(): Boolean {
     val request = commonRequestBuilder
@@ -43,10 +40,7 @@ fun isSelectStart(): Boolean {
     if (!isCourseSelectionPageOpen) return false
     val openedTurns = getOpenedTurn()
     return openedTurns.any { openedTurn ->
-        KEYWORD_通识选修 in openedTurn.name ||
-        KEYWORD_美育英语 in openedTurn.name ||
-        KEYWORD_培养方案 in openedTurn.name ||
-        KEYWORD_体育四史 in openedTurn.name
+        config.categoryCourseMap.keys.any { it in openedTurn.name }
     }
 }
 
