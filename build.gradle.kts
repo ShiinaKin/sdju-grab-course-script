@@ -1,21 +1,19 @@
 plugins {
-    kotlin("jvm") version "2.0.20"
+    kotlin("jvm") version "2.1.0"
     id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
-val version: String by project
 val jacksonVersion: String by project
 val okhttpVersion: String by project
 
 group = "io.sakurasou"
-version
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.0")
 
     implementation("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:$jacksonVersion")
@@ -32,6 +30,8 @@ dependencies {
 }
 
 tasks.shadowJar {
+    manifest { attributes["Main-Class"] = "io.sakurasou.MainKt" }
+    archiveFileName.set("sdju-grab-course-script-$version.jar")
     from(projectDir) {
         include("LICENCE")
     }
@@ -42,12 +42,7 @@ tasks.build {
 }
 
 tasks.jar {
-    manifest {
-        attributes["Main-Class"] = "io.sakurasou.MainKt"
-    }
-    from(projectDir) {
-        include("LICENCE")
-    }
+    enabled = false
 }
 
 tasks.test {
