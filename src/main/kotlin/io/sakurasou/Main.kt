@@ -19,11 +19,10 @@ import org.apache.commons.io.FileUtils
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.*
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.*
 import kotlin.system.exitProcess
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
 
 /**
@@ -84,7 +83,17 @@ This is free software, and you are welcome to redistribute it under certain cond
         }
 
         when (scanner.nextLine().trimIndent()) {
-            "1" -> grab()
+            "1" -> {
+                while (true) {
+                    try {
+                        grab()
+                        break
+                    } catch (_: Exception) {
+                        logger.error { "Grab courses failed, maybe server crashed." }
+                        runBlocking { delay(1.seconds) }
+                    }
+                }
+            }
 
             "2" -> {
                 init()
@@ -143,6 +152,7 @@ fun grab() {
         else logger.error { "Exception: $e" }
     } catch (e: Exception) {
         logger.error(e) { "Unexpected Exception: " }
+        throw e
     }
     logger.info { "Grab courses finished" }
 }
